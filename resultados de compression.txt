@@ -1,0 +1,4 @@
+modo fork
+"memoriaTotal": { "rss": 52625408, "heapTotal": 21843968, "heapUsed": 11126392, "external": 945899, "arrayBuffers": 41210 }
+con compression
+"memoriaTotal": { "rss": 43974656, "heapTotal": 13193216, "heapUsed": 11112784, "external": 945899, "arrayBuffers": 41210 }
