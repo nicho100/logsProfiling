@@ -1,27 +1,49 @@
 //npm innit -y ,npm i express ,i socket.io, init -y , i ejs,express cookie-parser, express-session,connect-mongo ,mongoose,passport,passport-local,bcrypt
-//minimist,dotenv
+//minimist,dotenv, i compression, i log4js
 const cluster =require("cluster")
 const numCpus=require("os").cpus().length
 const express=require('express')
 const {createServer}= require('http')
 require("./config/auth")
 const passport=require("passport")
-
-
-//const { ContenedorArchivo } = require('./controller/contenedorArchivos')
-const mongoStore=require("connect-mongo")
+const compression=require("compression")
+const log4js=require("log4js")
+//const mongoStore=require("connect-mongo")
+//const { ContenedorMongo } = require('./controller/contenedorMongoDb')
+//const { connectToDb } = require('./config/connectToDb')
+const { ContenedorArchivo } = require('./controller/contenedorArchivos')
 const expressSession=require("express-session")
-const { ContenedorMongo } = require('./controller/contenedorMongoDb')
 const { urlMongo, config } = require('./config/enviorment')
-const { connectToDb } = require('./config/connectToDb')
 const { routerRandom } = require('./routes/random')
 
-const chatDao = new ContenedorMongo ("chats")
-const productosDao= new ContenedorMongo("Productos")
+//const chatDao = new ContenedorMongo ("chats")
+//const productosDao= new ContenedorMongo("Productos")
 //const usuariossDao= new ContenedorMongo("usuarios")
-//const productosA= new ContenedorArchivo("productos")
-//const chat= new ContenedorArchivo("chats")
+const productosA= new ContenedorArchivo("productos")
+const chat= new ContenedorArchivo("chats")
 const modo=config.modo
+
+log4js.configure({//creamos los tipos de loggers
+    appenders:{
+     console:{type:"console"},
+     consoleLogger:{type:"logLevelFilter",appender:"console",level:"info"},
+     
+     warningFile:{type:"file",filename:"warning.log"},
+     warningFileLogger:{type:"logLevelFilter",appender:"warningFile",level:"warning"},
+      
+     errorFile:{type:"file",filename:"error.log"},
+     errorFileLogger:{type:"logLevelFilter",appender:"errorFile",level:"error"}, 
+    },
+    categories:{
+        default:{
+            appenders:["consoleLogger","warningFileLogger","errorFileLogger"],
+            level:"all",
+        }
+    }
+    
+
+})
+const logger=log4js.getLogger()
 
 if (cluster.isPrimary && modo==="cluster"){
     for(let i=0;i<numCpus;i++){
@@ -40,7 +62,7 @@ const server=createServer(app)
 const io =socketIo(server)
 
 app.use(expressSession({
-    store: mongoStore.create({mongoUrl:urlMongo}),
+    //store: mongoStore.create({mongoUrl:urlMongo}),
     secret:"secreto",
     resave: true,
     saveUninitialized:true,
@@ -56,17 +78,18 @@ app.set('view engine', 'ejs')
 
 app.use('/api',routerRandom)
 
+
 app.get('/datos',async (req,res)=>{
     if(req.session.username){
-    const produc=await productosDao.getAll()
-    //const produc=await productosA.getAll()
+    //const produc=await productosDao.getAll()
+    const produc=await productosA.getAll()
     const nombre=req.session.username
     res.render('form.ejs',{produc,nombre})
     return  
     }
     res.redirect("/login.html")
 })
-app.get("/info",()=>{
+app.get("/info",compression(),(req,res)=>{
     let path=process.argv[1]
     let processId=process.pid
     let node=process.version
@@ -83,7 +106,7 @@ app.get("/info",()=>{
         memoriaTotal:memoria,
         carpetaDelProyecto:carpetaProyecto
     }
-    return JSON.stringify(datos,null,2)
+    res.send(JSON.stringify(datos,null,2))
 })
 
 app.post('/signup',passport.authenticate("signup",{failureRedirect:"login.html"}),async (req,res)=>{
@@ -104,12 +127,16 @@ app.get("/logout",async(req,res)=>{
         res.send("hasta luego")
     })
 })
-
+app.get("*",(req,res)=>{
+    const {url,method}=req
+    logger.warn(`Ruta ${method} ${url} no implementada`)
+    res.send(`Ruta ${method} ${url} no implementada`)
+})
 io.on('connection',async(client) => {
-    const produc=await productosDao.getAll()//guardo todos los productos y mensajes en una variable
-    const messages=await chatDao.getAll()
-    //const produc=await productosA.getAll()
-    //const messages=await chat.getAll()
+    //const produc=await productosDao.getAll()//guardo todos los productos y mensajes en una variable
+    //const messages=await chatDao.getAll()
+    const produc=await productosA.getAll()
+    const messages=await chat.getAll()
     console.log("cliente se conecto")
     client.emit("messages",messages)//emito al cliente los mensajes y productos
     client.emit("products",produc)
@@ -135,11 +162,10 @@ io.on('connection',async(client) => {
   
     
  });
- connectToDb().then(()=>{
-   server.listen(config.puerto,(req,res)=>{console.log("funciona")  })
  
-}).catch((err)=>{
-console.log(err)
-})
+   server.listen(config.puerto,(req,res)=>logger.info("funciona")) 
+ 
 }
+
+
 
